@@ -1,0 +1,10 @@
+.venv*
+*.pyc
+__pycache__/
+logs/
+.env
+credentials.env
+chat_ids.txt
+cookies.json
+Telegram-Bot-Pocket.rar
+
