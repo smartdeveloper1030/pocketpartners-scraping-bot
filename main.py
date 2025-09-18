@@ -66,171 +66,22 @@ periods = [
     "Current week"
 ]
 
-# Add this as a global variable at the top of the file
-current_proxy_index = 0
-failed_proxies = set()  # Track failed proxies
-proxy_test_url = "https://httpbin.org/ip"  # URL to test proxy connectivity
-max_proxy_failures = 3  # Maximum consecutive failures before marking proxy as failed
-
 # Minimum withdrawal amount (in dollars)
 MIN_WITHDRAWAL_AMOUNT = 51
 
-def load_proxies():
-    proxies = []
-    try:
-        with open('./../proxy.txt', 'r') as f:
-            for line in f:
-                proxy = line.strip()
-                if proxy:
-                    proxies.append(proxy)
-    except Exception as e:
-        logger.error(f"Error loading proxies: {e}")
-    return proxies
-
-def get_proxy_config(proxy_str: str) -> dict:
-    """Convert proxy string to httpx proxy configuration"""
-    parts = proxy_str.split(":")
-    if len(parts) == 4:
-        host, port, username, password = parts
-        proxy_url = f"http://{username}:{password}@{host}:{port}"
-        return {
-            "http://": proxy_url,
-            "https://": proxy_url
-        }
-    else:
-        logger.error(f"Invalid proxy format: {proxy_str}")
-        return None
-
-async def test_proxy_connectivity(proxy_config: dict, timeout: float = 10.0) -> bool:
-    """Test if a proxy is working by making a test request"""
-    try:
-        async with httpx.AsyncClient(
-            proxies=proxy_config,
-            timeout=timeout,
-            follow_redirects=True
-        ) as test_client:
-            response = await test_client.get(proxy_test_url)
-            if response.status_code == 200:
-                logger.debug(f"Proxy test successful: {response.json().get('origin', 'unknown')}")
-                return True
-            else:
-                logger.warning(f"Proxy test failed with status code: {response.status_code}")
-                return False
-    except Exception as e:
-        logger.debug(f"Proxy test failed: {str(e)}")
-        return False
-
-def get_next_working_proxy() -> dict:
-    """Get the next working proxy, skipping failed ones"""
-    global current_proxy_index, failed_proxies
+async def get_rotating_proxy():
+    domain = "p.webshare.io"
+    port = 80
+    proxyusername="uyqgyajo-rotate"
+    proxypassword="ia4anr5881l4"
+    # Returns a proxy dict suitable for httpx.AsyncClient, using the credentials above
     
-    proxies = load_proxies()
-    if not proxies:
-        logger.warning("No proxies available")
-        return None
+    proxy_url = f"http://{proxyusername}:{proxypassword}@{domain}:{port}"
+    return {
+        "http://": proxy_url,
+        "https://": proxy_url
+    }
     
-    # Try to find a working proxy
-    attempts = 0
-    max_attempts = len(proxies) * 2  # Try each proxy twice before giving up
-    
-    while attempts < max_attempts:
-        # Get current proxy
-        proxy_str = proxies[current_proxy_index]
-        
-        # Skip if this proxy is marked as failed
-        if proxy_str in failed_proxies:
-            logger.debug(f"Skipping failed proxy: {proxy_str}")
-            current_proxy_index = (current_proxy_index + 1) % len(proxies)
-            attempts += 1
-            continue
-        
-        # Get proxy configuration
-        proxy_config = get_proxy_config(proxy_str)
-        if proxy_config:
-            logger.debug(f"Testing proxy: {proxy_str}")
-            return proxy_config
-        
-        # If proxy format is invalid, mark as failed and move to next
-        failed_proxies.add(proxy_str)
-        current_proxy_index = (current_proxy_index + 1) % len(proxies)
-        attempts += 1
-    
-    logger.error("No working proxies found after trying all available proxies")
-    return None
-
-async def get_working_proxy_with_test() -> dict:
-    """Get a working proxy with connectivity testing"""
-    global current_proxy_index, failed_proxies
-    
-    proxies = load_proxies()
-    if not proxies:
-        logger.warning("No proxies available")
-        return None
-    
-    # Try to find a working proxy
-    attempts = 0
-    max_attempts = len(proxies) * 2  # Try each proxy twice before giving up
-    
-    while attempts < max_attempts:
-        # Get current proxy
-        proxy_str = proxies[current_proxy_index]
-        
-        # Skip if this proxy is marked as failed
-        if proxy_str in failed_proxies:
-            logger.debug(f"Skipping failed proxy: {proxy_str}")
-            current_proxy_index = (current_proxy_index + 1) % len(proxies)
-            attempts += 1
-            continue
-        
-        # Get proxy configuration
-        proxy_config = get_proxy_config(proxy_str)
-        if not proxy_config:
-            failed_proxies.add(proxy_str)
-            current_proxy_index = (current_proxy_index + 1) % len(proxies)
-            attempts += 1
-            continue
-        
-        # Test the proxy
-        logger.debug(f"Testing proxy connectivity: {proxy_str}")
-        if await test_proxy_connectivity(proxy_config):
-            logger.info(f"Found working proxy: {proxy_str}")
-            # Move to next proxy for next call
-            current_proxy_index = (current_proxy_index + 1) % len(proxies)
-            return proxy_config
-        else:
-            logger.warning(f"Proxy test failed: {proxy_str}")
-            failed_proxies.add(proxy_str)
-            current_proxy_index = (current_proxy_index + 1) % len(proxies)
-            attempts += 1
-    
-    logger.error("No working proxies found after testing all available proxies")
-    return None
-
-def mark_proxy_as_failed(proxy_config: dict):
-    """Mark a proxy as failed so it won't be used again"""
-    global failed_proxies
-    
-    if not proxy_config:
-        return
-    
-    # Extract proxy string from config to mark as failed
-    proxies = load_proxies()
-    for proxy_str in proxies:
-        test_config = get_proxy_config(proxy_str)
-        if test_config and test_config == proxy_config:
-            failed_proxies.add(proxy_str)
-            logger.warning(f"Marked proxy as failed: {proxy_str}")
-            break
-
-def reset_failed_proxies():
-    """Reset the failed proxies list (useful for periodic cleanup)"""
-    global failed_proxies
-    failed_proxies.clear()
-    logger.info("Reset failed proxies list")
-
-def get_random_proxy():
-    """Legacy function - now redirects to the new system"""
-    return get_next_working_proxy()
 
 async def db_init():
     await Tortoise.init(
@@ -864,7 +715,7 @@ def send_alert() -> None:
 
 async def perform_login() -> None:
     # Get a working proxy with testing
-    proxy_config = await get_working_proxy_with_test()
+    proxy_config = await get_rotating_proxy()
     if proxy_config:
         # Close previous session if exists
         if hasattr(core, "session") and core.session:
