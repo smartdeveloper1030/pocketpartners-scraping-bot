@@ -66,171 +66,21 @@ periods = [
     "Current week"
 ]
 
-# Add this as a global variable at the top of the file
-current_proxy_index = 0
-failed_proxies = set()  # Track failed proxies
-proxy_test_url = "https://httpbin.org/ip"  # URL to test proxy connectivity
-max_proxy_failures = 3  # Maximum consecutive failures before marking proxy as failed
-
 # Minimum withdrawal amount (in dollars)
 MIN_WITHDRAWAL_AMOUNT = 51
 
-def load_proxies():
-    proxies = []
-    try:
-        with open('./../proxy.txt', 'r') as f:
-            for line in f:
-                proxy = line.strip()
-                if proxy:
-                    proxies.append(proxy)
-    except Exception as e:
-        logger.error(f"Error loading proxies: {e}")
-    return proxies
-
-def get_proxy_config(proxy_str: str) -> dict:
-    """Convert proxy string to httpx proxy configuration"""
-    parts = proxy_str.split(":")
-    if len(parts) == 4:
-        host, port, username, password = parts
-        proxy_url = f"http://{username}:{password}@{host}:{port}"
-        return {
-            "http://": proxy_url,
-            "https://": proxy_url
-        }
-    else:
-        logger.error(f"Invalid proxy format: {proxy_str}")
-        return None
-
-async def test_proxy_connectivity(proxy_config: dict, timeout: float = 10.0) -> bool:
-    """Test if a proxy is working by making a test request"""
-    try:
-        async with httpx.AsyncClient(
-            proxies=proxy_config,
-            timeout=timeout,
-            follow_redirects=True
-        ) as test_client:
-            response = await test_client.get(proxy_test_url)
-            if response.status_code == 200:
-                logger.debug(f"Proxy test successful: {response.json().get('origin', 'unknown')}")
-                return True
-            else:
-                logger.warning(f"Proxy test failed with status code: {response.status_code}")
-                return False
-    except Exception as e:
-        logger.debug(f"Proxy test failed: {str(e)}")
-        return False
-
-def get_next_working_proxy() -> dict:
-    """Get the next working proxy, skipping failed ones"""
-    global current_proxy_index, failed_proxies
+async def get_rotating_proxy():
+    domain = "p.webshare.io"
+    port = 80
+    proxyusername="uyqgyajo-rotate"
+    proxypassword="ia4anr5881l4"
+    # Returns a proxy dict suitable for httpx.AsyncClient, using the credentials above
     
-    proxies = load_proxies()
-    if not proxies:
-        logger.warning("No proxies available")
-        return None
-    
-    # Try to find a working proxy
-    attempts = 0
-    max_attempts = len(proxies) * 2  # Try each proxy twice before giving up
-    
-    while attempts < max_attempts:
-        # Get current proxy
-        proxy_str = proxies[current_proxy_index]
-        
-        # Skip if this proxy is marked as failed
-        if proxy_str in failed_proxies:
-            logger.debug(f"Skipping failed proxy: {proxy_str}")
-            current_proxy_index = (current_proxy_index + 1) % len(proxies)
-            attempts += 1
-            continue
-        
-        # Get proxy configuration
-        proxy_config = get_proxy_config(proxy_str)
-        if proxy_config:
-            logger.debug(f"Testing proxy: {proxy_str}")
-            return proxy_config
-        
-        # If proxy format is invalid, mark as failed and move to next
-        failed_proxies.add(proxy_str)
-        current_proxy_index = (current_proxy_index + 1) % len(proxies)
-        attempts += 1
-    
-    logger.error("No working proxies found after trying all available proxies")
-    return None
-
-async def get_working_proxy_with_test() -> dict:
-    """Get a working proxy with connectivity testing"""
-    global current_proxy_index, failed_proxies
-    
-    proxies = load_proxies()
-    if not proxies:
-        logger.warning("No proxies available")
-        return None
-    
-    # Try to find a working proxy
-    attempts = 0
-    max_attempts = len(proxies) * 2  # Try each proxy twice before giving up
-    
-    while attempts < max_attempts:
-        # Get current proxy
-        proxy_str = proxies[current_proxy_index]
-        
-        # Skip if this proxy is marked as failed
-        if proxy_str in failed_proxies:
-            logger.debug(f"Skipping failed proxy: {proxy_str}")
-            current_proxy_index = (current_proxy_index + 1) % len(proxies)
-            attempts += 1
-            continue
-        
-        # Get proxy configuration
-        proxy_config = get_proxy_config(proxy_str)
-        if not proxy_config:
-            failed_proxies.add(proxy_str)
-            current_proxy_index = (current_proxy_index + 1) % len(proxies)
-            attempts += 1
-            continue
-        
-        # Test the proxy
-        logger.debug(f"Testing proxy connectivity: {proxy_str}")
-        if await test_proxy_connectivity(proxy_config):
-            logger.info(f"Found working proxy: {proxy_str}")
-            # Move to next proxy for next call
-            current_proxy_index = (current_proxy_index + 1) % len(proxies)
-            return proxy_config
-        else:
-            logger.warning(f"Proxy test failed: {proxy_str}")
-            failed_proxies.add(proxy_str)
-            current_proxy_index = (current_proxy_index + 1) % len(proxies)
-            attempts += 1
-    
-    logger.error("No working proxies found after testing all available proxies")
-    return None
-
-def mark_proxy_as_failed(proxy_config: dict):
-    """Mark a proxy as failed so it won't be used again"""
-    global failed_proxies
-    
-    if not proxy_config:
-        return
-    
-    # Extract proxy string from config to mark as failed
-    proxies = load_proxies()
-    for proxy_str in proxies:
-        test_config = get_proxy_config(proxy_str)
-        if test_config and test_config == proxy_config:
-            failed_proxies.add(proxy_str)
-            logger.warning(f"Marked proxy as failed: {proxy_str}")
-            break
-
-def reset_failed_proxies():
-    """Reset the failed proxies list (useful for periodic cleanup)"""
-    global failed_proxies
-    failed_proxies.clear()
-    logger.info("Reset failed proxies list")
-
-def get_random_proxy():
-    """Legacy function - now redirects to the new system"""
-    return get_next_working_proxy()
+    proxy_url = f"http://{proxyusername}:{proxypassword}@{domain}:{port}"
+    return {
+        "http://": proxy_url,
+        "https://": proxy_url
+    }
 
 async def db_init():
     await Tortoise.init(
@@ -261,14 +111,8 @@ async def fetch(url: str, **kwargs) -> httpx.Response:
                 retry_count += 1
                 logger.warning(f"Proxy connection error (attempt {retry_count}/{max_retries}): {str(e)}")
                 if retry_count < max_retries:
-                    # Mark current proxy as failed and get a new one
-                    if hasattr(core, 'session') and core.session:
-                        # Extract current proxy from session
-                        current_proxy = getattr(core.session, 'proxies', None)
-                        if current_proxy:
-                            mark_proxy_as_failed(current_proxy)
-                    # Get a new working proxy
-                    new_proxy = await get_working_proxy_with_test()
+                    # Get a new rotating proxy (each call gets a new proxy from the rotating pool)
+                    new_proxy = await get_rotating_proxy()
                     if new_proxy:
                         # Close current session and create new one with new proxy
                         await core.session.aclose()
@@ -280,10 +124,10 @@ async def fetch(url: str, **kwargs) -> httpx.Response:
                             proxies=new_proxy,
                             timeout=60.0
                         )
-                        logger.info(f"Switched to new proxy for retry {retry_count}")
+                        logger.info(f"Switched to new rotating proxy for retry {retry_count}")
                         await asyncio.sleep(2)  # Brief delay before retry
                     else:
-                        logger.error("No working proxies available for retry")
+                        logger.error("No rotating proxy available for retry")
                         break
                 else:
                     logger.error(f"All proxy retry attempts failed for URL: {url}")
@@ -864,7 +708,7 @@ def send_alert() -> None:
 
 async def perform_login() -> None:
     # Get a working proxy with testing
-    proxy_config = await get_working_proxy_with_test()
+    proxy_config = await get_rotating_proxy()
     if proxy_config:
         # Close previous session if exists
         if hasattr(core, "session") and core.session:
@@ -992,7 +836,7 @@ async def perform_login() -> None:
             # Try to switch proxy and retry login
             logger.info("Attempting to switch proxy due to timeout")
             try:
-                new_proxy = await get_working_proxy_with_test()
+                new_proxy = await get_rotating_proxy()
                 if new_proxy:
                     await core.session.aclose()
                     transport = httpx.AsyncHTTPTransport(retries=3)
@@ -1003,11 +847,11 @@ async def perform_login() -> None:
                         proxies=new_proxy,
                         timeout=60.0
                     )
-                    logger.info("Switched proxy due to timeout, retrying login")
+                    logger.info("Switched to new rotating proxy due to timeout, retrying login")
                     # Recursive call to retry login with new proxy
                     return await perform_login()
             except Exception as proxy_error:
-                logger.error(f"Failed to switch proxy after timeout: {proxy_error}")
+                logger.error(f"Failed to get new rotating proxy after timeout: {proxy_error}")
             raise
         except Exception as e:
             logger.error(f"Login error: {e}")
@@ -1015,7 +859,7 @@ async def perform_login() -> None:
             if "proxy" in str(e).lower() or "connection" in str(e).lower():
                 logger.info("Attempting to switch proxy due to connection error")
                 try:
-                    new_proxy = await get_working_proxy_with_test()
+                    new_proxy = await get_rotating_proxy()
                     if new_proxy:
                         await core.session.aclose()
                         transport = httpx.AsyncHTTPTransport(retries=3)
@@ -1026,11 +870,11 @@ async def perform_login() -> None:
                             proxies=new_proxy,
                             timeout=60.0
                         )
-                        logger.info("Switched proxy due to connection error, retrying login")
+                        logger.info("Switched to new rotating proxy due to connection error, retrying login")
                         # Recursive call to retry login with new proxy
                         return await perform_login()
                 except Exception as proxy_error:
-                    logger.error(f"Failed to switch proxy after connection error: {proxy_error}")
+                    logger.error(f"Failed to get new rotating proxy after connection error: {proxy_error}")
             raise
 
 
@@ -1126,9 +970,9 @@ async def broadcast(message: types.Message = None) -> None:
             # Periodic proxy health check (every 30 minutes)
             current_time = time.time()
             if current_time - last_proxy_reset > 1800:  # 30 minutes
-                reset_failed_proxies()
+                # For rotating proxy, we just log this as the proxy service handles rotation
+                logger.info("Periodic proxy check - using rotating proxy service")
                 last_proxy_reset = current_time
-                logger.info("Periodic proxy reset completed")
             
             if not PROCESSED:
                 if validate_minute(59):
@@ -1166,7 +1010,7 @@ async def broadcast(message: types.Message = None) -> None:
             if "proxy" in str(e).lower() or "connection" in str(e).lower():
                 logger.info("Detected proxy/connection error, attempting to get new working proxy")
                 try:
-                    new_proxy = await get_working_proxy_with_test()
+                    new_proxy = await get_rotating_proxy()
                     if new_proxy and hasattr(core, 'session') and core.session:
                         await core.session.aclose()
                         transport = httpx.AsyncHTTPTransport(retries=3)
@@ -1177,9 +1021,9 @@ async def broadcast(message: types.Message = None) -> None:
                             proxies=new_proxy,
                             timeout=60.0
                         )
-                        logger.info("Successfully switched to new proxy after error")
+                        logger.info("Successfully switched to new rotating proxy after error")
                 except Exception as proxy_error:
-                    logger.error(f"Failed to switch proxy after error: {proxy_error}")
+                    logger.error(f"Failed to get new rotating proxy after error: {proxy_error}")
         finally:
             await asyncio.sleep(1)
 
@@ -1598,7 +1442,7 @@ async def monitor_withdrawal(message: types.Message = None) -> None:
             if "proxy" in str(e).lower() or "connection" in str(e).lower():
                 logger.info("Detected proxy/connection error in withdrawal monitor, attempting to get new working proxy")
                 try:
-                    new_proxy = await get_working_proxy_with_test()
+                    new_proxy = await get_rotating_proxy()
                     if new_proxy and hasattr(core, 'session') and core.session:
                         await core.session.aclose()
                         transport = httpx.AsyncHTTPTransport(retries=3)
@@ -1609,9 +1453,9 @@ async def monitor_withdrawal(message: types.Message = None) -> None:
                             proxies=new_proxy,
                             timeout=60.0
                         )
-                        logger.info("Successfully switched to new proxy after withdrawal monitor error")
+                        logger.info("Successfully switched to new rotating proxy after withdrawal monitor error")
                 except Exception as proxy_error:
-                    logger.error(f"Failed to switch proxy after withdrawal monitor error: {proxy_error}")
+                    logger.error(f"Failed to get new rotating proxy after withdrawal monitor error: {proxy_error}")
         finally:
             await asyncio.sleep(1)
 
