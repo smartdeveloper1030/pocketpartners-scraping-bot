@@ -82,39 +82,6 @@ async def get_rotating_proxy():
         "https://": proxy_url
     }
 
-# Proxy management functions to replace the missing ones
-async def get_working_proxy_with_test():
-    """Get a working proxy by testing the rotating proxy"""
-    try:
-        proxy_config = await get_rotating_proxy()
-        # Test the proxy with a simple request
-        test_client = httpx.AsyncClient(
-            proxies=proxy_config,
-            timeout=10.0
-        )
-        try:
-            response = await test_client.get("http://httpbin.org/ip")
-            if response.status_code == 200:
-                logger.info("Proxy test successful")
-                return proxy_config
-        except Exception as e:
-            logger.warning(f"Proxy test failed: {e}")
-        finally:
-            await test_client.aclose()
-    except Exception as e:
-        logger.error(f"Error getting working proxy: {e}")
-    return None
-
-def mark_proxy_as_failed(proxy_config):
-    """Mark a proxy as failed (for rotating proxy, we just log it)"""
-    logger.warning("Proxy marked as failed, will get new rotating proxy on next request")
-
-def reset_failed_proxies():
-    """Reset failed proxies (for rotating proxy, this is a no-op)"""
-    logger.info("Reset failed proxies called (no-op for rotating proxy)")
-    pass
-    
-
 async def db_init():
     await Tortoise.init(
         db_url="sqlite://%s" % models.db_name,
