@@ -85,9 +85,9 @@ def formatted_message(value_type: str, *args) -> str:
         )
         if value_type == "commission":
             sum_commission_old, sum_commission_change, sum_commission_current = get_commission_sums_from_db()
-            str += "\n\n" + "💰 Total Commission: $%s" % "{:,.2f} ({})".format(sum_commission_current, format_currency(sum_commission_change)),
-            str += "\n" + "⬅️ Previous: $%s" % "{:,.2f}".format(sum_commission_old),
-            str += "\n" + "🔀 Difference: $%s" % format_currency(sum_commission_change)
+            str += "\n\n" + "💰 Total Commission: $%s" % "{:,.2f} ({})".format(sum_commission_current, format_currency(sum_commission_change))
+            str += "\n" + "⬅️ Previous: $%s" % "{:,.2f}".format(sum_commission_old)
+            str += "\n" + "🔀 Difference: %s" % format_currency(sum_commission_change)
         return str
         
 def formatted_message_even_no_change(value_type: str, *args) -> str:
@@ -101,11 +101,17 @@ def formatted_message_even_no_change(value_type: str, *args) -> str:
             format_percentage(args[4]) + f" ({format_percentage_change(args[9])})"
         )
     else:
-        return "\n".join(mapped_lines) % (
+        str =  "\n".join(mapped_lines) % (
             "{:,.2f} ({})".format(args[2], format_currency(args[1])),
             "{:,.2f}".format(float(args[0])),
             format_currency(args[3]),
         )
+        if value_type == "commission":
+            sum_commission_old, sum_commission_change, sum_commission_current = get_commission_sums_from_db()
+            str += "\n\n" + "💰 Total Commission: $%s" % "{:,.2f} ({})".format(sum_commission_current, format_currency(sum_commission_change))
+            str += "\n" + "⬅️ Previous: $%s" % "{:,.2f}".format(sum_commission_old)
+            str += "\n" + "🔀 Difference: %s" % format_currency(sum_commission_change)
+        return str
 
 
 def formatted_message_compare(value_type: str, *args) -> str:
