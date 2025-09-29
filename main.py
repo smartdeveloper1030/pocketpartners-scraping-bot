@@ -3,6 +3,7 @@ import logging
 from bs4 import BeautifulSoup as bs
 from threading import Event
 import os
+import sqlite3
 
 import models
 import alert
@@ -555,7 +556,6 @@ def format_even_no_change(stats: dict, period: str) -> str:
 
     return final_message
 
-
 def format_comparison(previous_obj: models.StatisticsLog, current_obj: models.StatisticsLog, filter: str, data: dict) -> str:
     print("deposits: ", previous_obj.deposits)
     print("previous_obj.commission: ", previous_obj.commission)
@@ -636,8 +636,6 @@ def format_comparison(previous_obj: models.StatisticsLog, current_obj: models.St
     # ]).replace("Income: ", "Difference: ").replace("Outcome: ", "Difference: ")\
     #     .replace("$-", "-$").strip() + str("\n\n📅 %s" % period)
 
-
-
 def format_withdrawal(_type: str, amount: int | float, mode: str = "Bot", wallet_str: str = "") -> str:
     # import locale
 
@@ -686,6 +684,61 @@ async def get_statistics() -> dict[str, dict]:
         )
     return final_info
 
+
+def save_commission_to_db(commission_old: float, commission_change: float, commission_current: float) -> None:
+    """Save commission data to commission.db SQLite database"""
+    try:
+        user_email = core.email 
+        # Create database connection
+        conn = sqlite3.connect("./../commission.db")
+        cursor = conn.cursor()
+        
+        # Create table if it doesn't exist
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS commission_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                commission_old REAL,
+                commission_change REAL,
+                commission_current REAL,
+                user_email TEXT UNIQUE
+            )
+        ''')
+        
+        # Check if record exists for this email
+        cursor.execute('''
+            SELECT id FROM commission_data WHERE user_email = ?
+        ''', (user_email,))
+        
+        existing_record = cursor.fetchone()
+        
+        if existing_record:
+            # Update existing record
+            cursor.execute('''
+                UPDATE commission_data 
+                SET timestamp = CURRENT_TIMESTAMP,
+                    commission_old = ?,
+                    commission_change = ?,
+                    commission_current = ?
+                WHERE user_email = ?
+            ''', (commission_old, commission_change, commission_current, user_email))
+            logger.debug(f"Updated commission data for email: {user_email}")
+        else:
+            # Insert new record
+            cursor.execute('''
+                INSERT INTO commission_data (commission_old, commission_change, commission_current, user_email)
+                VALUES (?, ?, ?, ?)
+            ''', (commission_old, commission_change, commission_current, user_email))
+            logger.debug(f"Inserted new commission data for email: {user_email}")
+        
+        # Commit and close
+        conn.commit()
+        conn.close()
+        
+        logger.debug("Commission data saved to commission.db successfully")
+        
+    except Exception as e:
+        logger.exception(f"Failed to save commission data to database: {e}")
 
 def send_alert() -> None:
     messages = core.load_messages()
@@ -877,7 +930,6 @@ async def perform_login() -> None:
                     logger.error(f"Failed to get new rotating proxy after connection error: {proxy_error}")
             raise
 
-
 def validate_minute(minute: int) -> bool:
     # return True
     return datetime.now(tz=models.pytz.utc).time().minute == minute
@@ -898,7 +950,6 @@ def get_error(res: httpx.Response) -> str:
         )
         for div in data.select("div.alert-danger")
     ])
-
 
 async def send_message(user_id: int, text: str, disable_notification: bool = False, **kwargs) -> bool:
     """
@@ -936,7 +987,6 @@ async def send_message(user_id: int, text: str, disable_notification: bool = Fal
         return True
     return False
 
-
 async def test_func():
     current_stats = await get_statistics()
     print("current_stats: ", current_stats)
@@ -967,16 +1017,19 @@ async def broadcast(message: types.Message = None) -> None:
     while BROADCAST_EVENT.is_set():
         # print("BROADCAST_EVENT.is_set(): ", BROADCAST_EVENT.is_set())
         try:
-            # Periodic proxy health check (every 30 minutes)
-            current_time = time.time()
-            if current_time - last_proxy_reset > 1800:  # 30 minutes
-                # For rotating proxy, we just log this as the proxy service handles rotation
-                logger.info("Periodic proxy check - using rotating proxy service")
-                last_proxy_reset = current_time
-            
             if not PROCESSED:
                 if validate_minute(59):
                     current_stats = await get_statistics()
+                    
+                    # Save commission data to commission.db
+                    if current_stats and "Current week" in current_stats:
+                        stats = current_stats["Current week"]
+                        commission_old = stats.get("commission_old", 0)
+                        commission_change = stats.get("commission_change", 0)
+                        commission_current = stats.get("commission_current", 0)
+                       
+                        save_commission_to_db(commission_old, commission_change, commission_current)
+                    
                     PROCESSED = True
                 else:
                     continue
