@@ -38,6 +38,32 @@ mapping = {
     "bottom": ["👥 Visitors: %s", "🗂 Registrations: %s", "🗂 Average: %s", "📥 FTDs: %s", "📥 Average FTDs: %s"],
 }
 
+def get_commission_sums_from_db():
+    """
+    Retrieve the sum of commission_old, commission_change, and commission_current from the commission.db database.
+    Returns a tuple: (sum_commission_old, sum_commission_change, sum_commission_current)
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect("./../commission.db")
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                SUM(commission_old), 
+                SUM(commission_change), 
+                SUM(commission_current)
+            FROM commission_data
+        ''')
+        result = cursor.fetchone()
+        conn.close()
+        if result:
+            return result  # (sum_commission_old, sum_commission_change, sum_commission_current)
+        else:
+            return (0, 0, 0)
+    except Exception as e:
+        if logger:
+            logger.exception(f"Failed to get commission sums from database: {e}")
+        return (0, 0, 0)
 
 def formatted_message(value_type: str, *args) -> str:
     mapped_lines = mapping[value_type]
@@ -52,11 +78,17 @@ def formatted_message(value_type: str, *args) -> str:
     else:
         if not args[1]:
             return None
-        return "\n".join(mapped_lines) % (
+        str = "\n".join(mapped_lines) % (
             "{:,.2f} ({})".format(args[2], format_currency(args[1])),
             "{:,.2f}".format(float(args[0])),
             format_currency(args[3]),
         )
+        if value_type == "commission":
+            sum_commission_old, sum_commission_change, sum_commission_current = get_commission_sums_from_db()
+            str += "\n\n" + "💰 Total Commission: $%s" % "{:,.2f} ({})".format(sum_commission_current, format_currency(sum_commission_change))
+            str += "\n" + "⬅️ Previous: $%s" % "{:,.2f}".format(sum_commission_old)
+            str += "\n" + "🔀 Difference: %s" % format_currency(sum_commission_change)
+        return str
         
 def formatted_message_even_no_change(value_type: str, *args) -> str:
     mapped_lines = mapping[value_type]
@@ -69,11 +101,17 @@ def formatted_message_even_no_change(value_type: str, *args) -> str:
             format_percentage(args[4]) + f" ({format_percentage_change(args[9])})"
         )
     else:
-        return "\n".join(mapped_lines) % (
+        str =  "\n".join(mapped_lines) % (
             "{:,.2f} ({})".format(args[2], format_currency(args[1])),
             "{:,.2f}".format(float(args[0])),
             format_currency(args[3]),
         )
+        if value_type == "commission":
+            sum_commission_old, sum_commission_change, sum_commission_current = get_commission_sums_from_db()
+            str += "\n\n" + "💰 Total Commission: $%s" % "{:,.2f} ({})".format(sum_commission_current, format_currency(sum_commission_change))
+            str += "\n" + "⬅️ Previous: $%s" % "{:,.2f}".format(sum_commission_old)
+            str += "\n" + "🔀 Difference: %s" % format_currency(sum_commission_change)
+        return str
 
 
 def formatted_message_compare(value_type: str, *args) -> str:
