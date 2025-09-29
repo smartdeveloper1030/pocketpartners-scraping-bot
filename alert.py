@@ -51,7 +51,8 @@ def get_commission_sums_from_db():
             SELECT 
                 SUM(commission_old), 
                 SUM(commission_change), 
-                SUM(commission_current)
+                SUM(commission_current),
+                SUM(week_change_in_commission)
             FROM commission_data
         ''')
         result = cursor.fetchone()
@@ -59,11 +60,11 @@ def get_commission_sums_from_db():
         if result:
             return result  # (sum_commission_old, sum_commission_change, sum_commission_current)
         else:
-            return (0, 0, 0)
+            return (0, 0, 0, 0)
     except Exception as e:
         if logger:
             logger.exception(f"Failed to get commission sums from database: {e}")
-        return (0, 0, 0)
+        return (0, 0, 0, 0)
 
 def formatted_message(value_type: str, *args) -> str:
     mapped_lines = mapping[value_type]
@@ -84,10 +85,10 @@ def formatted_message(value_type: str, *args) -> str:
             format_currency(args[3]),
         )
         if value_type == "commission":
-            sum_commission_old, sum_commission_change, sum_commission_current = get_commission_sums_from_db()
-            str += "\n\n" + "💰 Total Commission: $%s" % "{:,.2f} ({})".format(sum_commission_current, format_currency(sum_commission_change))
-            str += "\n" + "⬅️ Previous: $%s" % "{:,.2f}".format(sum_commission_old)
-            str += "\n" + "🔀 Difference: %s" % format_currency(sum_commission_change)
+            args = get_commission_sums_from_db()
+            str += "\n\n" + "💰 Total Commission: $%s" % "{:,.2f} ({})".format(args[2], format_currency(args[1]))
+            str += "\n" + "⬅️ Previous: $%s" % "{:,.2f}".format(float(args[0]))
+            str += "\n" + "🔀 Difference: %s" % format_currency(args[3])
         return str
         
 def formatted_message_even_no_change(value_type: str, *args) -> str:
@@ -107,10 +108,10 @@ def formatted_message_even_no_change(value_type: str, *args) -> str:
             format_currency(args[3]),
         )
         if value_type == "commission":
-            sum_commission_old, sum_commission_change, sum_commission_current = get_commission_sums_from_db()
-            str += "\n\n" + "💰 Total Commission: $%s" % "{:,.2f} ({})".format(sum_commission_current, format_currency(sum_commission_change))
-            str += "\n" + "⬅️ Previous: $%s" % "{:,.2f}".format(sum_commission_old)
-            str += "\n" + "🔀 Difference: %s" % format_currency(sum_commission_change)
+            args = get_commission_sums_from_db()
+            str += "\n\n" + "💰 Total Commission: $%s" % "{:,.2f} ({})".format(args[2], format_currency(args[1]))
+            str += "\n" + "⬅️ Previous: $%s" % "{:,.2f}".format(float(args[0]))
+            str += "\n" + "🔀 Difference: %s" % format_currency(args[3])
         return str
 
 

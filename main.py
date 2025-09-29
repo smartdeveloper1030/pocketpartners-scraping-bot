@@ -685,7 +685,7 @@ async def get_statistics() -> dict[str, dict]:
     return final_info
 
 
-def save_commission_to_db(commission_old: float, commission_change: float, commission_current: float) -> None:
+def save_commission_to_db(commission_old: float, commission_change: float, commission_current: float, week_change_in_commission: float) -> None:
     """Save commission data to commission.db SQLite database"""
     try:
         user_email = core.email 
@@ -701,6 +701,7 @@ def save_commission_to_db(commission_old: float, commission_change: float, commi
                 commission_old REAL,
                 commission_change REAL,
                 commission_current REAL,
+                week_change_in_commission REAL,
                 user_email TEXT UNIQUE
             )
         ''')
@@ -719,16 +720,17 @@ def save_commission_to_db(commission_old: float, commission_change: float, commi
                 SET timestamp = CURRENT_TIMESTAMP,
                     commission_old = ?,
                     commission_change = ?,
-                    commission_current = ?
+                    commission_current = ?,
+                    week_change_in_commission = ?
                 WHERE user_email = ?
-            ''', (commission_old, commission_change, commission_current, user_email))
+            ''', (commission_old, commission_change, commission_current, week_change_in_commission, user_email))
             logger.debug(f"Updated commission data for email: {user_email}")
         else:
             # Insert new record
             cursor.execute('''
-                INSERT INTO commission_data (commission_old, commission_change, commission_current, user_email)
-                VALUES (?, ?, ?, ?)
-            ''', (commission_old, commission_change, commission_current, user_email))
+                INSERT INTO commission_data (commission_old, commission_change, commission_current, week_change_in_commission, user_email)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (commission_old, commission_change, commission_current, week_change_in_commission, user_email))
             logger.debug(f"Inserted new commission data for email: {user_email}")
         
         # Commit and close
@@ -1010,7 +1012,6 @@ async def broadcast(message: types.Message = None) -> None:
     current_stats = {}
     PROCESSED = False
     ALERT_SENT = False
-    last_proxy_reset = time.time()
     
     await test_func()
     # return
@@ -1027,8 +1028,9 @@ async def broadcast(message: types.Message = None) -> None:
                         commission_old = stats.get("commission_old", 0)
                         commission_change = stats.get("commission_change", 0)
                         commission_current = stats.get("commission_current", 0)
-                       
-                        save_commission_to_db(commission_old, commission_change, commission_current)
+                        week_change_in_commission = stats.get("week_change_in_commission", 0)
+
+                        save_commission_to_db(commission_old, commission_change, commission_current, week_change_in_commission)
                     
                     PROCESSED = True
                 else:
