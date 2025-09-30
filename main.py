@@ -688,6 +688,12 @@ async def get_statistics() -> dict[str, dict]:
 def save_commission_to_db(commission_old: float, commission_change: float, commission_current: float, week_change_in_commission: float) -> None:
     """Save commission data to commission.db SQLite database"""
     try:
+        print("--------------------------------")
+        print("commission_old: ", commission_old)
+        print("commission_change: ", commission_change)
+        print("commission_current: ", commission_current)
+        print("week_change_in_commission: ", week_change_in_commission)
+        print("--------------------------------")
         user_email = core.email 
         # Create database connection
         conn = sqlite3.connect("./../commission.db")
