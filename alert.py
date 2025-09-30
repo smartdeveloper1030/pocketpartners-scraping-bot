@@ -77,7 +77,7 @@ def formatted_message(value_type: str, *args) -> str:
             format_percentage(args[4]) + f" ({format_percentage_change(args[9])})"
         )
     else:
-        if not args[1]:
+        if value_type != "commission" and not args[1]:
             return None
         str = "\n".join(mapped_lines) % (
             "{:,.2f} ({})".format(args[2], format_currency(args[1])),
